@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEST</title>
+    <!-- Vuejs -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <!-- Axios -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.2/axios.min.js"></script>
+    <!-- web3  -->
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.7.1/dist/web3.min.js"></script>
+    <!-- Tailwind cdn -->
+    <script src="https://cdn.tailwindcss.com/3.0.23"></script>
+</head>
+<body class="flex h-screen justify-center">
+
+    <div id="app" class="w-96 m-auto p-2 shadow rounded-lg bg-gray-800 text-white">
+        <div class="flex flex-col">
+            <h2 class="text-2xl uppercase">accounts</h2>
+            <label class="flex items-center bg-gray-700 rounded-lg p-2 text-ellipsis overflow-hidden" for="item" v-for="(item, index) in accounts">
+                <input :value="item" type="radio" name="account" :id="item" v-model="currentAccount">
+                <span class="mx-1"></span>
+                <span class="w-full">{{item}}</span>
+            </label>
+        </div>
+        <div class="flex justify-center" v-if="!jwt">
+            <button v-if="currentAccount" style="background: #58bb16;border: 0;padding:1em 2em;color:white;border-radius:1em;margin:1em;" @click="sign">Sign</button>
+            <button v-if="!currentAccount" style="background: #58bb16;border: 0;padding:1em 2em;color:white;border-radius:1em;margin:1em;" @click="connectWallet">Connect Wallet</button>
+        </div>
+
+        <div v-else class="bg-gray-700 rounded-lg mt-2 p-2">
+            Here's your JSON web token:
+            It's saved to LocalStorage.
+            <pre class="w-full overflow-auto bg-white p-2 mt-1 rounded-md text-gray-800">{{ jwt }}</pre>
+            <button class="mt-2" style="background: #dd3311;border: 0;padding:0.5em 1em;color:white;border-radius:0.5em;" @click="signout">Sign Out</button>
+        </div>
+        
+    </div>
+    
+    <script>
+        var app = new Vue({
+            el: '#app',
+            data: {
+                currentAccount: '',
+                accounts: [],
+                abi: [ { "inputs": [ { "internalType": "address", "name": "_user", "type": "address" } ], "name": "addToWhitelist", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [ { "internalType": "address", "name": "_addressToRemove", "type": "address" } ], "name": "removeWhitelistedAddress", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [ { "internalType": "address", "name": "_newOwner", "type": "address" } ], "name": "transferOwnership", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "inputs": [], "name": "getWhitelistedAddresses", "outputs": [ { "internalType": "address[]", "name": "", "type": "address[]" } ], "stateMutability": "view", "type": "function" }, { "inputs": [ { "internalType": "address", "name": "_user", "type": "address" } ], "name": "isWhitelisted", "outputs": [ { "internalType": "bool", "name": "", "type": "bool" } ], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "owner", "outputs": [ { "internalType": "address", "name": "", "type": "address" } ], "stateMutability": "view", "type": "function" } ],
+                address: '0x7Cf1313d4Dd0624ad4f9152280cAd8A739d00895',
+                jwt: '',
+            },
+            async mounted() {
+                if(localStorage.getItem('x-nsys-token')) {
+                    await this.verify();
+                    this.jwt = localStorage.getItem('x-nsys-token');
+                }
+                this.connectWallet();
+            },
+            methods: {
+                
+                async signout(){
+                    localStorage.removeItem('x-nsys-token');
+                    this.jwt = '';
+                    location.reload();
+                },
+                async connectWallet(){
+                    // get wallet
+                    if(window.ethereum) {
+                        try {
+                            await window.ethereum.send('eth_requestAccounts')
+                            window.web3 = new Web3(ethereum);
+                            this.accounts = await window.web3.eth.getAccounts();
+                            this.currentAccount = this.accounts[0];
+                            window.contract = new window.web3.eth.Contract(this.abi, this.address);
+                        } catch (error) {
+                            alert(error.message);
+                        }
+                    } else if (window.web3) {
+                        window.web3 = new Web3(web3.currentProvider);
+                    } else {
+                        console.log('Non-Ethereum browser detected. You should consider trying MetaMask!');
+                    }
+                },
+                async verify(){
+                    try {
+                        const response = await axios.get('https://nsys.inf4mation.com/api/jwt/verify', {
+                            headers: {
+                                "x-accessKeyId": "AKIAYL6VP5R57W4UDVR5",
+                                "x-secretAccessKey": "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",
+                                'x-auth-token': localStorage.getItem('x-nsys-token')
+                            }
+                        });
+                    } catch (error) {
+                        localStorage.removeItem('x-nsys-token');
+                    }
+                },
+                async sign(){
+                    // Get nonce
+                    let response = "";
+                    try{
+                        response = await axios.get(`https://nsys.inf4mation.com/api/users/check?WalletUID=${this.currentAccount}`,{
+                            headers: {
+                                "x-accessKeyId": "AKIAYL6VP5R57W4UDVR5",
+                                "x-secretAccessKey": "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"
+                            }
+                        });
+                        const nonce = response.data.Nonce;
+
+                        // Get signature
+                        const signature = await window.web3.eth.personal.sign(`Sign : ${nonce}`, this.currentAccount);
+                        try {
+                            response = await axios.post(`https://nsys.inf4mation.com/api/users/connect`, {
+                                WalletUID: this.currentAccount,
+                                Signature: signature,
+                                Nonce: nonce
+                            },{
+                                headers: {
+                                    "x-accessKeyId": "AKIAYL6VP5R57W4UDVR5",
+                                    "x-secretAccessKey": "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"
+                                }
+                            });
+                            this.jwt = response.data.token;
+                            localStorage.setItem('x-nsys-token', this.jwt);
+                        } catch (error) {
+                            console.log(error);
+                            alert(error.response.data);
+                        }
+                        console.log(nonce);
+                    } catch (error) {
+                        console.log(error);
+                        alert(error.response.data);
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
